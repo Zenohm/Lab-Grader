@@ -1,0 +1,78 @@
+#:import JavaLexer pygments.lexers.jvm.JavaLexer
+#:import exit sys.exit
+#:import FadeTransition kivy.uix.screenmanager.FadeTransition
+
+<MainFrame>:
+    transition: FadeTransition()
+    MainMenu:
+        id: menu
+
+<MainMenu>:
+    GridLayout:
+        rows: 2
+        GridLayout:
+            Label:
+                id: display
+                center: root.center
+                text: root.message
+                size_hint: None, None
+                size: self.texture_size
+        GridLayout:
+            id: buttons
+            Button:
+                id: start_button
+                center: display.center[0], display.center[1] - self.texture_size[1] - 50
+                size_hint: None, None
+                size: self.texture_size[0] + 50, self.texture_size[1] + 50
+                text: "Load submissions"
+                on_press:
+                    display.text = "Loading student\nsubmissions..."
+                    buttons.remove_widget(start_button)
+                on_release: app.root.load_attempts()
+
+
+<StudentScreen>:
+    id: screen
+    GridLayout:
+        rows: 3
+        ActionBar:
+            ActionView:
+                ActionPrevious:
+                    text: "Exit"
+                    on_release: exit(0)
+                ActionButton:
+                    text: "Settings"
+                    on_release: app.open_settings()
+                ActionButton:
+                    text: "Font Size +"
+                    on_release: root.font_size += 1
+                ActionButton:
+                    text: "Font Size -"
+                    on_release: root.font_size -= 1
+                ActionButton:
+                    text: "Previous Student"
+                    on_press: app.root.previous_student()
+                ActionButton:
+                    text: "Next Student"
+                    on_press: app.root.next_student()
+        CodeInput:
+            id: code
+            do_scroll_y: 100
+            text: screen.code
+            lexer: JavaLexer()
+            style_name: "monokai"
+            font_size: root.font_size
+            text_size: None, None
+            readonly: True
+        GridLayout:
+            cols: 2
+            ScrollView:
+                Label:
+                    id: info
+                    text: screen.info
+                    text_size: None, None
+                    size_hint: None, None
+                    size: self.texture_size
+            TextInput:
+                id: requirements
+                text: screen.requirements
