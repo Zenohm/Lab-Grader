@@ -44,6 +44,12 @@
                     text: "Settings"
                     on_release: app.open_settings()
                 ActionButton:
+                    text: "Compile"
+                    on_release: app.root.compile()
+                ActionButton:
+                    text: "Run"
+                    on_release: app.root.run()
+                ActionButton:
                     text: "Font Size +"
                     on_release: root.font_size += 1
                 ActionButton:

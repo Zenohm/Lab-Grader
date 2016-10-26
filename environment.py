@@ -14,6 +14,7 @@ from kivy.app import App
 from kivy.properties import StringProperty, NumericProperty
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.core.window import Window
+import subprocess
 import sys
 
 
@@ -45,15 +46,20 @@ class MainFrame(ScreenManager):
         # p.open()
 
     def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
-        if keycode[1] == 'a':
+        key = keycode[1]
+        if key == 'a':
             self.previous_student()
-        elif keycode[1] == 'd':
+        elif key == 'd':
             self.next_student()
-        elif keycode[1] == 'left':
+        elif key == 'c':
+            self.compile()
+        elif key == 'r':
+            self.run()
+        elif key == 'left':
             self.previous_student()
-        elif keycode[1] == 'right':
+        elif key == 'right':
             self.next_student()
-        elif keycode[1] == 'escape' or keycode[1] == 'q':
+        elif key == 'escape' or key == 'q':
             sys.exit(0)
         return True
 
@@ -79,7 +85,7 @@ class MainFrame(ScreenManager):
                                            requirements=requirements)
             # self.ids.menu.message = "Submission Loaded: " + name
             self.add_widget(student_screen)
-        self.ids.menu.message = "Loading complete.\nSwitching to review screen..."
+        self.ids.menu.message = "Loading complete.\nSwitching to review screen"
         self.current = self.attempts[MainFrame.current_position].student_name
 
     def previous_student(self):
@@ -93,6 +99,16 @@ class MainFrame(ScreenManager):
         if MainFrame.current_position < len(self.attempts)-1:
             MainFrame.current_position += 1
             self.current = self.attempts[MainFrame.current_position].student_name
+
+    def compile(self):
+        commands = self.attempts[MainFrame.current_position].execution_commands
+        compile_status = subprocess.call(commands['compile'])
+        return str(compile_status)
+
+    def run(self):
+        commands = self.attempts[MainFrame.current_position].execution_commands
+        run_status = subprocess.call(commands['execute'])
+        return str(run_status)
 
 
 class TAinator(App):
