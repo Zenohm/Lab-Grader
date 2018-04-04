@@ -1,0 +1,55 @@
+#! /usr/bin/bash
+
+# -e : Exit on any command failure (DISABLED)
+# -u : Treat undeclared variables as an error
+# -f : Disable filename expansion
+# -o pipefail : Produce a failure if any command in a pipe-line fails.
+set -uf -o pipefail
+
+
+
+# handle non-option arguments
+if [[ $# -eq 0 ]]; then
+    echo "$0: A single input file is required."
+    exit 4
+fi
+
+dtrx -ro $1
+readonly gradebook=$(basename "$1" .zip)
+detox $gradebook
+cd $gradebook
+
+find . -name "*.java" | while read submission; do
+    if [[ $# -eq 2 ]]; then
+        if [[ $submission =~ "$2" ]]; then
+            :
+        else
+            continue
+        fi
+    fi
+
+    echo $submission
+    filedirectory=$(dirname "$submission")
+    all_files=$(find "${filedirectory}" -name "*.java" -printf "%p ")
+    highlight -O ansi --force $submission
+    echo ""
+    read -p "Press Enter to continue" </dev/tty
+
+    # Check for a main method
+    if grep -q "public static void main" "$submission"; then
+        echo -e "\nCompiling Program...\n"
+        javac $all_files
+        package_name=$(basename $(dirname "$submission"))
+        { # Try
+            if [ "$package_name" = "src" ]; then
+                java -classpath "$filedirectory" $(basename "$submission" .java)
+            else
+                java -classpath "$(dirname "$filedirectory")" "$package_name.$(basename "$submission" .java)"
+            fi
+        } || { # Catch
+            echo "There was some form of compilation error with the file: $(dirname "$submission")"
+        }
+        echo ""
+        read -p "Press Enter to continue" </dev/tty
+    fi
+done
