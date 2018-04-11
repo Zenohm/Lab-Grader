@@ -7,49 +7,192 @@
 set -uf -o pipefail
 
 
+verbose=false
+compile_submission=false
+get_info=false
+edit_info=false
+overwrite=false
+student=
 
-# handle non-option arguments
-if [[ $# -eq 0 ]]; then
-    echo "$0: A single input file is required."
-    exit 4
-fi
+function main {
+    # === Argument Handling ===
+    if [[ $# -eq 0 ]]; then
+        echo "$0: A single input file is required."
+        exit 1
+    fi
 
-dtrx -ro $1
-readonly gradebook=$(basename "$1" .zip)
-detox $gradebook
-cd $gradebook
+    local OPTIND flag
+    while getopts 's:cievw' flag; do
+      case "${flag}" in
+        s) student="${OPTARG}" ;;
+        c) compile_submission=true ;;
+        i) get_info=true ;;
+        e) edit_info=true ;;
+        v) verbose=true ;;
+        w) overwrite=true ;;
+        *) echo "$0: Unexpected option ${flag}"; exit 2 ;;
+      esac
+    done
 
-find . -name "*.java" | while read submission; do
-    if [[ $# -eq 2 ]]; then
-        if [[ $submission =~ "$2" ]]; then
-            :
-        else
+    shift $((OPTIND-1))
+
+    # === Primary Logic ===
+    for path in "$@"; do
+        echo "Processing $path."
+        local gradebook=$(extract_and_sanitize $path)
+        process_gradebook "$gradebook"
+    done
+}
+
+function extract_and_sanitize {
+    if [[ $# -eq 0 ]]; then
+        echo "$0: A single input file is required."
+        return
+    fi
+
+    # Extract gradebook, clean up filenames, enter that gradebook.
+    local extracted_archive=$(basename "$1" .zip)
+    if [[ "$overwrite" != true && -d "$extracted_archive" ]]; then
+        :
+    else
+        dtrx -ro "$1"
+    fi
+    #detox "$extracted_archive"
+    echo "$extracted_archive"
+}
+
+function process_gradebook {
+    if [ "$verbose" = true ]; then
+        echo "[DEBUG] Entering directory: $1"
+    fi
+    pushd "$1" > /dev/null
+
+    #local submissions=$(find "." -name "*.txt")
+    #local sources=$(find . -type d -name "*attempt*")
+    #for submission in "$submissions"; do
+    find "." -name "*.txt" | while read submission
+    do
+        if [[ ! ( -z "$student" || "$submission" =~ "$student" ) ]]; then
             continue
         fi
+
+        process_submission "${submission}"
+    done
+
+    #find . -name "*.java" | while read submission; do
+        #if [[ ! ( -z "$student" || $submission =~ "$student" ) ]]; then
+            #continue
+        #fi
+
+        #echo $submission
+        #highlight -O ansi --force $submission | less -R
+        ##pause
+
+        #if grep -q "public static void main" "$submission"; then
+            #compile "$submission"
+            #pause
+        #fi
+    #done
+
+    if [ "$verbose" = true ]; then
+        echo "[DEBUG] Exiting directory: $1"
+    fi
+    popd > /dev/null
+}
+
+function process_submission {
+    if [ "$verbose" = true ]; then
+        echo "[DEBUG] Asked to process file $1"
+    fi
+    local source=$(grep -oE "Filename: .*" "$1" | cut -d" " -f1 --complement | cut -d. -f1)
+    if [ "$verbose" = true ]; then
+        echo "[DEBUG] Found source = $source"
+        pause
     fi
 
-    echo $submission
-    filedirectory=$(dirname "$submission")
-    all_files=$(find "${filedirectory}" -name "*.java" -printf "%p ")
-    highlight -O ansi --force $submission
-    echo ""
-    read -p "Press Enter to continue" </dev/tty
+    if [ "$get_info" = true ]; then
+        less -R "$1"
+    fi
 
-    # Check for a main method
-    if grep -q "public static void main" "$submission"; then
-        echo -e "\nCompiling Program...\n"
-        javac $all_files
-        package_name=$(basename $(dirname "$submission"))
+    if [ "$verbose" = true ]; then
+        echo "[DEBUG] Entering directory: $source"
+    fi
+    pushd "$source" > /dev/null
+
+    local codes=$(find "." -name "*.java" -print)
+    local texts=$(find "." -name "*.txt" -print)
+    local mains=$(grep -lr "public static void main" ".")
+    if [ "$verbose" = true ]; then
+        echo -e "[DEBUG] Found code files:\n$codes"
+        echo -e "[DEBUG] Found text files:\n$texts"
+        echo -e "[DEBUG] Found main method:\n$mains"
+        pause
+    fi
+
+    if [ "$compile_submission" = true ]; then
+        for main in "$mains"; do
+            compile "$main"
+        done
+    fi
+
+    if [ "$verbose" = true ]; then
+        echo "[DEBUG] Exiting directory: $source"
+    fi
+    popd > /dev/null
+    if [ "$edit_info" = true ]; then
+        $EDITOR "$1"
+    fi
+}
+
+function compile {
+        echo -e "\nCompiling $1...\n"
+        filedirectory=$(dirname "$1")
+
+        # Compile all .java files in the directory of the submission.
+        javac $(find "${filedirectory}" -name "*.java" -printf "%p ")
+
+        #package_name=$(basename $(dirname "$1")) # Look at the directory of the file for its package information.
+        package_name=$(grep -oE "^package .*;" "$1" | sed 's/.* \(.*\).$/\1/') # Look in the file for its package information.
+        #rg ".*package .*;" "$java_files"
         { # Try
-            if [ "$package_name" = "src" ]; then
-                java -classpath "$filedirectory" $(basename "$submission" .java)
+            if [ -z "$package_name" ]; then
+                java -classpath "$filedirectory" $(basename "$1" .java)
             else
-                java -classpath "$(dirname "$filedirectory")" "$package_name.$(basename "$submission" .java)"
+                java -classpath "$(dirname "$filedirectory")" "$package_name.$(basename "$1" .java)"
             fi
         } || { # Catch
-            echo "There was some form of compilation error with the file: $(dirname "$submission")"
+            echo "There was some form of compilation error with the file: $(dirname "$1")"
         }
+}
+
+function pause {
         echo ""
         read -p "Press Enter to continue" </dev/tty
+}
+
+function get_date {
+    # 2018-02-10-23-27-44
+    :
+}
+
+map() {
+    local command i rep
+    if [ $# -lt 2 ] || [[ ! "$@" =~ :[[:space:]] ]];then
+        echo "Invalid syntax." >&2; return 1
     fi
-done
+    until [[ $1 =~ : ]]; do
+        command="$command $1"; shift
+    done
+    command="$command ${1%:}"; shift
+    for i in "$@"; do
+        if [[ $command =~ \{\} ]];then
+            rep="${command//\{\}/\"$i\"}"
+            eval "${rep//\\/\\\\}"
+        else
+            eval "${command//\\/\\\\} \"${i//\\/\\\\}\""
+        fi
+    done
+}
+
+
+main "$@"
